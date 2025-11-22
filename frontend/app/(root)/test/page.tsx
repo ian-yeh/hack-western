@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createTest } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -27,21 +28,24 @@ export default function DashboardPage() {
 
     setIsRunning(true);
 
-    // simple client-side session id
-    const sessionId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}`;
+    try {
+      const response = await createTest({
+        url: serverUrl,
+        focus: testPrompt,
+      });
 
-    const params = new URLSearchParams({
-      serverUrl,
-      prompt: testPrompt,
-    });
+      const params = new URLSearchParams({
+        url: serverUrl,
+        focus: testPrompt,
+      });
 
-    console.log(params.toString())
-
-    router.push(`/test/${sessionId}?${params.toString()}`);
-    setIsRunning(false);
+      router.push(`/test/${response.id}?${params.toString()}`);
+    } catch (error) {
+      console.error("Failed to create test:", error);
+      // Handle error (show toast, etc.)
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
