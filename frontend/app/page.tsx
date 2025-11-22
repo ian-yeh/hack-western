@@ -3,10 +3,26 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import StepCard from '../components/landing/StepCard';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 
 export default function Home(): React.ReactElement {
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <header className="border-b border-white/10 backdrop-blur-sm bg-black/50 sticky top-0 z-50">
+        <div className="container mx-auto px-6 py-4 max-w-7xl flex items-center justify-between">
+          <Logo />
+          <Link href={"/test"}>
+            <Button 
+              variant="outline" 
+              className="bg-transparent border-purple-500/30 text-white hover:bg-white/10 hover:text-white"
+            >
+              Get Started
+            </Button>
+          </Link>
+        </div>
+      </header>
+
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
         {/* Animated background gradient */}
@@ -71,18 +87,18 @@ export default function Home(): React.ReactElement {
           <div className="space-y-8">
             <StepCard
               step="01"
-              title="Connect Your Project"
-              description="Point our CLI to your local project directory. No configuration needed."
+              title="Submit Your URL & Instructions"
+              description="Enter your local development server URL and describe what you want to test. Our AI agent will explore your application automatically."
             />
             <StepCard
               step="02"
-              title="AI Analyzes Your Code"
-              description="Our AI understands your codebase structure and generates intelligent test scenarios."
+              title="AI Agent Explores & Tests"
+              description="Using Playwright and Gemini AI, our agent navigates your site, interacts with elements, and generates comprehensive test cases in real-time."
             />
             <StepCard
               step="03"
-              title="Run Tests & Ship"
-              description="Execute comprehensive tests instantly and deploy with confidence."
+              title="View Real-Time Results"
+              description="Watch as test cases are generated live with screenshots, action logs, and pass/fail status. Get instant feedback on your application's behavior."
             />
           </div>
         </div>
@@ -99,14 +115,16 @@ export default function Home(): React.ReactElement {
             Your Testing?
           </h2>
           <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto font-light">
-            Join thousands of developers shipping better code with AI-powered testing
+            Automate your QA testing with AI-powered browser automation
           </p>
-          <Button 
-            size="lg" 
-            className="bg-gradient-to-r from-blue-600 via-purple-600 to-red-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-red-700 text-lg px-12 py-7 rounded-full font-medium transition-all duration-300 hover:scale-105 shadow-2xl shadow-purple-500/50"
-          >
-            Start Testing Now <ArrowRight className="ml-2 w-5 h-5" />
-          </Button>
+          <Link href={"/test"}>
+            <Button 
+              size="lg" 
+              className="bg-gradient-to-r from-blue-600 via-purple-600 to-red-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-red-700 text-lg px-12 py-7 rounded-full font-medium transition-all duration-300 hover:scale-105 shadow-2xl shadow-purple-500/50"
+            >
+              Start Testing Now <ArrowRight className="ml-2 w-5 h-5" />
+            </Button>
+          </Link>
         </div>
       </section>
 
