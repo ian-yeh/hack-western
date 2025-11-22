@@ -4,7 +4,7 @@ from datetime import datetime
 
 class TestRequest(BaseModel):
     url: str
-    focus: Optional[str] = None
+    focus: str
 
 class TestResponse(BaseModel):
     id: str
@@ -29,7 +29,7 @@ class TestCase(BaseModel):
 class TestRun(BaseModel):
     id: str
     url: str
-    focus: Optional[str] = None
+    focus: str
     status: Literal["running", "complete", "failed"]
     actions: list[Action] = []
     cases: list[TestCase] = []
