@@ -1,40 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
   History,
   Loader2,
-  Send,
   Sparkles,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 
-type TestStatus = "passed" | "failed" | "running";
-
-interface TestResult {
-  id: string;
-  name: string;
-  status: TestStatus;
-  message?: string;
-  duration?: number;
-  screenshots?: string[];
-}
-
-interface TestRun {
-  id: string;
-  prompt: string;
-  url: string;
-  createdAt: string;
-  results: TestResult[];
-  status: "running" | "completed" | "failed";
-}
 import { getTest, type TestRun, type TestCase, type Action } from "@/lib/api";
 import { io } from "socket.io-client";
 import Image from "next/image";
@@ -52,11 +30,6 @@ export default function TestSessionClient({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   initialPrompt,
 }: Props) {
-  const [serverUrl] = useState(initialUrl);
-  const [currentPrompt, setCurrentPrompt] = useState(initialPrompt);
-  const [runs, setRuns] = useState<TestRun[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
   const [testRun, setTestRun] = useState<TestRun | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -81,8 +54,6 @@ export default function TestSessionClient({
   useEffect(() => {
     if (!sessionId) return;
 
-  const runTests = useCallback(async (promptToRun: string) => {
-    if (!serverUrl || !promptToRun) return;
     const newSocket = io("http://127.0.0.1:8000", {
       query: { testId: sessionId },
     });
@@ -92,7 +63,7 @@ export default function TestSessionClient({
     });
 
     newSocket.on("action", (action: Action) => {
-      setTestRun((prev) => {
+      setTestRun((prev: TestRun | null) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -102,7 +73,7 @@ export default function TestSessionClient({
     });
 
     newSocket.on("testcase", (testCase: TestCase) => {
-      setTestRun((prev) => {
+      setTestRun((prev: TestRun | null) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -112,7 +83,7 @@ export default function TestSessionClient({
     });
 
     newSocket.on("complete", () => {
-      setTestRun((prev) => {
+      setTestRun((prev: TestRun | null) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -122,7 +93,7 @@ export default function TestSessionClient({
     });
 
     newSocket.on("error", () => {
-      setTestRun((prev) => {
+      setTestRun((prev: TestRun | null) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -145,7 +116,7 @@ export default function TestSessionClient({
       case "pending":
         return <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />;
     }
-  }, [serverUrl, sessionId]);
+  };
 
   const totalPassed = testRun?.cases.filter((c) => c.status === "pass").length ?? 0;
   const totalFailed = testRun?.cases.filter((c) => c.status === "fail").length ?? 0;
