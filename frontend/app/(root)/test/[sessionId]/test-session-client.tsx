@@ -35,6 +35,9 @@ interface TestRun {
   results: TestResult[];
   status: "running" | "completed" | "failed";
 }
+import { getTest, type TestRun, type TestCase, type Action } from "@/lib/api";
+import { io } from "socket.io-client";
+import Image from "next/image";
 
 interface Props {
   sessionId: string;
@@ -44,7 +47,9 @@ interface Props {
 
 export default function TestSessionClient({
   sessionId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   initialUrl,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   initialPrompt,
 }: Props) {
   const [serverUrl] = useState(initialUrl);
@@ -52,89 +57,114 @@ export default function TestSessionClient({
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [testRun, setTestRun] = useState<TestRun | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const selectedRun = useMemo(
-    () => runs.find((r) => r.id === selectedRunId) ?? runs[runs.length - 1],
-    [runs, selectedRunId]
-  );
+  // Fetch test results on mount
+  useEffect(() => {
+    const fetchTestResults = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getTest(sessionId);
+        setTestRun(data);
+      } catch (error) {
+        console.error("Failed to fetch test results:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const getStatusIcon = (status: TestStatus) => {
-    switch (status) {
-      case "passed":
-        return <CheckCircle2 className="h-4 w-4 text-green-400" />;
-      case "failed":
-        return <XCircle className="h-4 w-4 text-red-400" />;
-      case "running":
-        return <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />;
-    }
-  };
+    fetchTestResults();
+  }, [sessionId]);
 
-  const totalPassed =
-    selectedRun?.results.filter((r) => r.status === "passed").length ?? 0;
-  const totalFailed =
-    selectedRun?.results.filter((r) => r.status === "failed").length ?? 0;
+  // Connect to Socket.io for real-time updates
+  useEffect(() => {
+    if (!sessionId) return;
 
   const runTests = useCallback(async (promptToRun: string) => {
     if (!serverUrl || !promptToRun) return;
+    const newSocket = io("http://127.0.0.1:8000", {
+      query: { testId: sessionId },
+    });
 
-    setIsRunning(true);
+    newSocket.on("connect", () => {
+      console.log("Connected to Socket.io");
+    });
 
-    const runId = crypto.randomUUID();
-    const newRun: TestRun = {
-      id: runId,
-      prompt: promptToRun,
-      url: serverUrl,
-      createdAt: new Date().toISOString(),
-      results: [],
-      status: "running",
-    };
-
-    setRuns((prev) => [...prev, newRun]);
-    setSelectedRunId(runId);
-
-    try {
-      const response = await fetch("/api/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serverUrl, prompt: promptToRun, sessionId }),
+    newSocket.on("action", (action: Action) => {
+      setTestRun((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          actions: [...prev.actions, action],
+        };
       });
+    });
 
-      if (!response.ok) throw new Error("Test execution failed");
+    newSocket.on("testcase", (testCase: TestCase) => {
+      setTestRun((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          cases: [...prev.cases, testCase],
+        };
+      });
+    });
 
-      const data = await response.json();
-      const results: TestResult[] = data.results || [];
+    newSocket.on("complete", () => {
+      setTestRun((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: "complete",
+        };
+      });
+    });
 
-      setRuns((prev) =>
-        prev.map((run) =>
-          run.id === runId ? { ...run, results, status: "completed" } : run
-        )
-      );
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unexpected error occurred";
-      setRuns((prev) =>
-        prev.map((run) =>
-          run.id === runId
-            ? {
-                ...run,
-                status: "failed",
-                results: [
-                  { id: "error", name: "Test Execution Failed", status: "failed", message },
-                ],
-              }
-            : run
-        )
-      );
-    } finally {
-      setIsRunning(false);
+    newSocket.on("error", () => {
+      setTestRun((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: "failed",
+        };
+      });
+    });
+
+    return () => {
+      newSocket.close();
+    };
+  }, [sessionId]);
+
+  const getStatusIcon = (status: "pass" | "fail" | "pending") => {
+    switch (status) {
+      case "pass":
+        return <CheckCircle2 className="h-4 w-4 text-green-400" />;
+      case "fail":
+        return <XCircle className="h-4 w-4 text-red-400" />;
+      case "pending":
+        return <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />;
     }
   }, [serverUrl, sessionId]);
 
+  const totalPassed = testRun?.cases.filter((c) => c.status === "pass").length ?? 0;
+  const totalFailed = testRun?.cases.filter((c) => c.status === "fail").length ?? 0;
+
+  // Poll for updates periodically (fallback if Socket.io fails)
   useEffect(() => {
-    if (initialPrompt && initialUrl && runs.length === 0) {
-      runTests(initialPrompt);
-    }
-  }, [initialPrompt, initialUrl, runTests, runs.length]);
+    if (!testRun || testRun.status === "complete" || testRun.status === "failed") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await getTest(sessionId);
+        setTestRun(data);
+      } catch (error) {
+        console.error("Failed to poll test results:", error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [sessionId, testRun]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#0f0a1f] to-[#1a0a1f] text-white flex">
@@ -150,37 +180,24 @@ export default function TestSessionClient({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {runs.length === 0 ? (
-            <div className="px-4 py-6 text-xs text-gray-500">
-              No previous test sessions.
+          {testRun ? (
+            <div className="px-4 py-4 space-y-2">
+              <div className="text-xs text-gray-400 mb-2">Test Run Info</div>
+              <div className="px-4 py-3 bg-purple-900/25 rounded-lg">
+                <p className="text-xs font-medium mb-1">{testRun.focus || "No focus specified"}</p>
+                <p className="text-[0.6rem] text-gray-500">{testRun.url}</p>
+                <p className="text-[0.6rem] text-gray-500 mt-1">
+                  Status: <span className="capitalize">{testRun.status}</span>
+                </p>
+                <p className="text-[0.6rem] text-gray-500">
+                  {testRun.cases.length} test cases · {testRun.actions.length} actions
+                </p>
+              </div>
             </div>
           ) : (
-            <ul className="py-2">
-              {runs.map((run) => (
-                <li key={run.id}>
-                  <button
-                    onClick={() => setSelectedRunId(run.id)}
-                    className={`w-full text-left px-4 py-3 text-xs flex items-start gap-2 hover:bg-purple-900/20 ${
-                      selectedRun?.id === run.id ? "bg-purple-900/25" : ""
-                    }`}
-                  >
-                    {getStatusIcon(
-                      run.status === "running"
-                        ? "running"
-                        : run.results.some((r) => r.status === "failed")
-                        ? "failed"
-                        : "passed"
-                    )}
-                    <div className="flex-1">
-                      <p className="font-medium line-clamp-2">{run.prompt}</p>
-                      <p className="text-[0.6rem] text-gray-500 mt-1">
-                        {new Date(run.createdAt).toLocaleTimeString()} · {run.url}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="px-4 py-6 text-xs text-gray-500">
+              Loading test session...
+            </div>
           )}
         </div>
       </aside>
@@ -202,7 +219,7 @@ export default function TestSessionClient({
             </div>
           </div>
 
-          {!!selectedRun && (
+          {testRun && (
             <div className="flex items-center gap-4 text-xs text-gray-400">
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4 text-green-400" />
@@ -212,82 +229,132 @@ export default function TestSessionClient({
                 <XCircle className="h-4 w-4 text-red-400" />
                 <span>{totalFailed} failed</span>
               </div>
+              {testRun.status === "running" && (
+                <div className="flex items-center gap-1">
+                  <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />
+                  <span>Running...</span>
+                </div>
+              )}
             </div>
           )}
         </header>
 
         {/* CHAT AREA */}
         <main className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-
-          {selectedRun && (
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+            </div>
+          ) : testRun ? (
             <>
               {/* USER MESSAGE */}
               <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-purple-600 flex items-center justify-center">U</div>
+                <div className="h-8 w-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-semibold">U</div>
                 <div className="bg-[#151521] border border-gray-700 rounded-xl px-4 py-3 max-w-3xl">
-                  <p className="text-sm whitespace-pre-line">{selectedRun.prompt}</p>
+                  <p className="text-sm whitespace-pre-line">{testRun.focus || "Test this application"}</p>
+                  <p className="text-xs text-gray-500 mt-2">URL: {testRun.url}</p>
                 </div>
               </div>
 
-              {/* AI RESPONSE */}
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center">AI</div>
-                <div className="flex-1 max-w-3xl space-y-4">
-                  {selectedRun.results.map((result) => (
-                    <Card key={result.id} className="bg-[#0f0f1e] border-gray-800">
-                      <CardContent className="p-4 space-y-2">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(result.status)}
-                          <span className="font-medium">{result.name}</span>
-                        </div>
-                        {result.message && <p className="text-xs text-gray-400">{result.message}</p>}
-                        {result.duration && <p className="text-xs text-gray-500">{result.duration}ms</p>}
+              {/* AI RESPONSE - Actions */}
+              {testRun.actions.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-semibold">AI</div>
+                  <div className="flex-1 max-w-3xl space-y-2">
+                    <div className="text-xs text-gray-400 mb-2">Actions ({testRun.actions.length})</div>
+                    {testRun.actions.map((action, idx) => (
+                      <div key={idx} className="bg-[#0f0f1e] border border-gray-800 rounded-lg px-3 py-2 text-xs">
+                        <span className="text-purple-400 capitalize">{action.type}</span>
+                        {action.element && <span className="text-gray-400 ml-2">{action.element}</span>}
+                        <span className="text-gray-600 ml-2 text-[0.65rem]">
+                          {new Date(action.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                        {result.screenshots?.length ? (
-                          <div className="grid grid-cols-2 gap-2 mt-3">
-                            {result.screenshots.map((src, idx) => (
-                              <Image
-                                key={idx}
-                                src={src}
-                                alt="screenshot"
-                                width={400}
-                                height={300}
-                                className="rounded-lg border border-gray-700"
-                              />
-                            ))}
+              {/* AI RESPONSE - Test Cases */}
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-semibold">AI</div>
+                <div className="flex-1 max-w-3xl space-y-4">
+                  <div className="text-xs text-gray-400 mb-2">Test Cases ({testRun.cases.length})</div>
+                  {testRun.cases.length === 0 ? (
+                    <div className="text-sm text-gray-500">No test cases generated yet...</div>
+                  ) : (
+                    testRun.cases.map((testCase) => (
+                      <Card key={testCase.id} className="bg-[#0f0f1e] border-gray-800">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(testCase.status)}
+                            <span className="font-medium text-sm">{testCase.title}</span>
                           </div>
-                        ) : null}
-                      </CardContent>
-                    </Card>
-                  ))}
+                          
+                          {testCase.steps.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-400">Steps:</p>
+                              <ul className="list-disc list-inside text-xs text-gray-300 space-y-1">
+                                {testCase.steps.map((step, idx) => (
+                                  <li key={idx}>{step}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400">Expected:</p>
+                            <p className="text-xs text-gray-300">{testCase.expected}</p>
+                          </div>
+
+                          {testCase.actual && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-400">Actual:</p>
+                              <p className="text-xs text-gray-300">{testCase.actual}</p>
+                            </div>
+                          )}
+
+                          {testCase.screenshot && (
+                            <div className="mt-3">
+                              <Image
+                                src={`data:image/png;base64,${testCase.screenshot}`}
+                                alt="Test screenshot"
+                                width={800}
+                                height={600}
+                                className="rounded-lg border border-gray-700 max-w-full h-auto"
+                              />
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
                 </div>
               </div>
             </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              Test session not found
+            </div>
           )}
         </main>
 
-        {/* RE-PROMPT INPUT */}
+        {/* INFO FOOTER */}
         <footer className="border-t border-purple-900/30 p-4 bg-[#0d0d14]">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!currentPrompt || isRunning) return;
-              runTests(currentPrompt);
-            }}
-            className="max-w-3xl mx-auto flex flex-col gap-2"
-          >
-            <Textarea
-              value={currentPrompt}
-              onChange={(e) => setCurrentPrompt(e.target.value)}
-              placeholder="Ask follow-up test instructions..."
-              className="bg-[#13131f] border-gray-700 text-sm"
-            />
-            <div className="flex justify-end">
-              <Button disabled={!currentPrompt || isRunning} className="bg-purple-600">
-                {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </div>
-          </form>
+          <div className="max-w-3xl mx-auto text-xs text-gray-500">
+            {testRun?.status === "running" && (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                <span>Test is running... Updates will appear in real-time</span>
+              </div>
+            )}
+            {testRun?.status === "complete" && (
+              <div className="text-green-400">✓ Test completed</div>
+            )}
+            {testRun?.status === "failed" && (
+              <div className="text-red-400">✗ Test failed</div>
+            )}
+          </div>
         </footer>
       </div>
     </div>
