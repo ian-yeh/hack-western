@@ -92,3 +92,17 @@ export async function getTestCases(testId: string): Promise<{ test_id: string; c
   return response.json();
 }
 
+/**
+ * Get all past test runs
+ */
+export async function getAllTests(): Promise<TestRun[]> {
+  const response = await fetch(`${API_BASE_URL}/api/tests`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch tests" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
