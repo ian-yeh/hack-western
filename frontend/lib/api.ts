@@ -14,6 +14,7 @@ export interface Action {
   type: "navigate" | "click" | "input" | "screenshot";
   element?: string;
   value?: string;
+  reasoning?: string;
   screenshot?: string;
   timestamp: string;
 }
