@@ -302,63 +302,6 @@ export default function TestSessionClient({
                     </div>
                   </div>
                 )}
-
-                {/* AI RESPONSE - Test Cases */}
-                <div className="flex items-start gap-3">
-                  <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-semibold">AI</div>
-                  <div className="flex-1 max-w-3xl space-y-4">
-                    <div className="text-xs text-gray-400 mb-2">Test Cases ({testRun.cases.length})</div>
-                    {testRun.cases.length === 0 ? (
-                      <div className="text-sm text-gray-500">No test cases generated yet...</div>
-                    ) : (
-                      testRun.cases.map((testCase) => (
-                        <Card key={testCase.id} className="bg-[#0f0f1e] border-gray-800">
-                          <CardContent className="p-4 space-y-3">
-                            <div className="flex items-center gap-2">
-                              {getStatusIcon(testCase.status)}
-                              <span className="font-medium text-sm">{testCase.title}</span>
-                            </div>
-                            
-                            {testCase.steps.length > 0 && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold text-gray-400">Steps:</p>
-                                <ul className="list-disc list-inside text-xs text-gray-300 space-y-1">
-                                  {testCase.steps.map((step, idx) => (
-                                    <li key={idx}>{step}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            <div className="space-y-1">
-                              <p className="text-xs font-semibold text-gray-400">Expected:</p>
-                              <p className="text-xs text-gray-300">{testCase.expected}</p>
-                            </div>
-
-                            {testCase.actual && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold text-gray-400">Actual:</p>
-                                <p className="text-xs text-gray-300">{testCase.actual}</p>
-                              </div>
-                            )}
-
-                            {testCase.screenshot && (
-                              <div className="mt-3">
-                                <Image
-                                  src={`data:image/png;base64,${testCase.screenshot}`}
-                                  alt="Test screenshot"
-                                  width={800}
-                                  height={600}
-                                  className="rounded-lg border border-gray-700 max-w-full h-auto"
-                                />
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
 
               {/* RIGHT COLUMN - Screenshot */}
