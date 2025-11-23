@@ -1,23 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
   History,
   Loader2,
-  MessageSquare,
-  Play,
   Send,
   Sparkles,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 
 type TestStatus = "passed" | "failed" | "running";
 
@@ -50,7 +47,7 @@ export default function TestSessionClient({
   initialUrl,
   initialPrompt,
 }: Props) {
-  const [serverUrl, setServerUrl] = useState(initialUrl);
+  const [serverUrl] = useState(initialUrl);
   const [currentPrompt, setCurrentPrompt] = useState(initialPrompt);
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -77,7 +74,7 @@ export default function TestSessionClient({
   const totalFailed =
     selectedRun?.results.filter((r) => r.status === "failed").length ?? 0;
 
-  const runTests = async (promptToRun: string) => {
+  const runTests = useCallback(async (promptToRun: string) => {
     if (!serverUrl || !promptToRun) return;
 
     setIsRunning(true);
@@ -131,13 +128,13 @@ export default function TestSessionClient({
     } finally {
       setIsRunning(false);
     }
-  };
+  }, [serverUrl, sessionId]);
 
   useEffect(() => {
     if (initialPrompt && initialUrl && runs.length === 0) {
       runTests(initialPrompt);
     }
-  }, [initialPrompt, initialUrl]);
+  }, [initialPrompt, initialUrl, runTests, runs.length]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#0f0a1f] to-[#1a0a1f] text-white flex">
@@ -249,10 +246,12 @@ export default function TestSessionClient({
                         {result.screenshots?.length ? (
                           <div className="grid grid-cols-2 gap-2 mt-3">
                             {result.screenshots.map((src, idx) => (
-                              <img
+                              <Image
                                 key={idx}
                                 src={src}
                                 alt="screenshot"
+                                width={400}
+                                height={300}
                                 className="rounded-lg border border-gray-700"
                               />
                             ))}
