@@ -83,6 +83,7 @@ export default function TestSessionClient({
     });
 
     newSocket.on("action", (action: Action) => {
+      console.log("Received action via Socket.IO:", action);
       setTestRun((prev: TestRun | null) => {
         if (!prev) return prev;
         return {
