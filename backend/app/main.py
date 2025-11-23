@@ -22,7 +22,6 @@ socket_app = socketio.ASGIApp(sio, app)
 @app.get("/")
 async def root():
     # return {"message": "Welcome to the TestPilot API"} # DEBUG
-    test_id = "example-test-id"
     return {
         "message": "TestPilot API",
         "version": "1.0.0",

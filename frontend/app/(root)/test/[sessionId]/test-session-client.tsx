@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getTest, type TestRun, type TestCase, type Action } from "@/lib/api";
 import { io } from "socket.io-client";
 import Image from "next/image";
+import { useData } from "@/hooks/useData";
 
 interface Props {
   sessionId: string;
@@ -58,6 +59,7 @@ export default function TestSessionClient({
         setIsLoading(true);
         const data = await getTest(sessionId);
         setTestRun(data);
+
       } catch (error) {
         console.error("Failed to fetch test results:", error);
       } finally {
@@ -166,7 +168,7 @@ export default function TestSessionClient({
   }, [sessionId, testRun]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#0f0a1f] to-[#1a0a1f] text-white flex">
+    <div className="min-h-screen bg-linear-to-br from-[#0a0a1a] via-[#0f0a1f] to-[#1a0a1f] text-white flex">
 
       {/* SIDEBAR */}
       <aside className="hidden md:flex md:w-72 border-r border-purple-900/30 bg-[#070711]/80 backdrop-blur-sm flex-col">
