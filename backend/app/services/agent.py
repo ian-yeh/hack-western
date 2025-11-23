@@ -8,6 +8,7 @@ from google.genai.types import Content, Part
 
 from app.models import Action, TestCase
 from app.store import store
+from backend.app.services.gemini import GEMINI_API_KEY
 
 # Screen dimensions
 SCREEN_WIDTH = 1440
@@ -40,7 +41,7 @@ async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
             await sio.emit('action', action.model_dump(), room=test_id)
             
             # Get Gemini client
-            client = genai.Client()
+            client = genai.Client(api_key=GEMINI_API_KEY)
             
             # Configure the model with Computer Use tool
             config = types.GenerateContentConfig(
