@@ -45,6 +45,9 @@ async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
 
 def _run_agent_sync(test_id: str, url: str, focus: str, sio, loop) -> None:
     """Synchronous version of the agent that runs in a thread."""
+    page = None
+    browser = None
+    
     try:
         # Get the test run from store
         test_run = store.get(test_id)
@@ -83,6 +86,7 @@ def _run_agent_sync(test_id: str, url: str, focus: str, sio, loop) -> None:
             # Agent loop - max 5 turns
             turn_limit = 5
             conversation_history = []
+            test_completed = False
             
             for i in range(turn_limit):
                 print(f"Turn {i+1}/{turn_limit}")
@@ -98,11 +102,20 @@ Current URL: {url}
 
 Analyze the screenshot and decide the first action to take to complete this test."""
                 else:
+                    # Build history summary
+                    history_text = "\n".join([
+                        f"- {h['action']}: {h['args']}" 
+                        for h in conversation_history
+                    ])
+                    print(f"Conversation history: {conversation_history}")
+                    
                     prompt = f"""Task: {focus}
 Current URL: {page.url}
-Previous actions: {len(conversation_history)} steps taken
 
-Analyze the screenshot and decide the next action. If the test is complete, use the 'done' action."""
+Previous actions taken:
+{history_text}
+
+Analyze the screenshot and decide the next action. If the test is complete, use the 'done' action. Do not repeat actions you have already taken unless absolutely necessary."""
                 
                 # Send request to Gemini
                 response = client.models.generate_content(
@@ -144,16 +157,28 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                     message = args.get("message", "Test completed")
                     print(f"Test {'passed' if success else 'failed'}: {message}")
                     
+                    # Take final screenshot
+                    final_screenshot = page.screenshot(type="png")
+                    final_screenshot_b64 = base64.b64encode(final_screenshot).decode('utf-8')
+                    
+                    # Log the done action with reasoning
                     action = Action(
-                        type="screenshot",
+                        type="done",
                         element=message,
+                        reasoning=reasoning,
+                        screenshot=final_screenshot_b64,
                         timestamp=datetime.now()
                     )
                     store.add_action(test_id, action)
+                    
+                    # Emit with model_dump to ensure proper serialization
+                    action_dict = action.model_dump()
+                    print(f"Emitting done action: {action_dict.get('type')}, reasoning: {action_dict.get('reasoning')[:50] if action_dict.get('reasoning') else 'None'}...")
                     asyncio.run_coroutine_threadsafe(
-                        sio.emit('action', action.model_dump(), room=test_id),
+                        sio.emit('action', action_dict, room=test_id),
                         loop
                     )
+                    test_completed = True
                     break
                 
                 # Execute the action
@@ -185,6 +210,28 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                     "result": result
                 })
             
+            # If test reached turn limit without completing, log a timeout action
+            if not test_completed:
+                timeout_screenshot = page.screenshot(type="png")
+                timeout_screenshot_b64 = base64.b64encode(timeout_screenshot).decode('utf-8')
+                
+                timeout_action = Action(
+                    type="done",
+                    element="Test reached maximum turn limit",
+                    reasoning=f"The test did not complete within {turn_limit} turns. The agent may need more steps or encountered an issue.",
+                    screenshot=timeout_screenshot_b64,
+                    timestamp=datetime.now()
+                )
+                store.add_action(test_id, timeout_action)
+                
+                # Emit with proper serialization
+                timeout_dict = timeout_action.model_dump()
+                print(f"Emitting timeout action: {timeout_dict.get('type')}")
+                asyncio.run_coroutine_threadsafe(
+                    sio.emit('action', timeout_dict, room=test_id),
+                    loop
+                )
+            
             browser.close()
         
         # Mark test as complete
@@ -198,11 +245,59 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
         print(f"Agent error: {str(e)}")
         import traceback
         traceback.print_exc()
-        store.update(test_id, status="failed")
-        asyncio.run_coroutine_threadsafe(
-            sio.emit('error', {"message": str(e)}, room=test_id),
-            loop
-        )
+        
+        # Try to capture error screenshot if browser is still available
+        error_screenshot_b64 = None
+        if page is not None:
+            try:
+                error_screenshot = page.screenshot(type="png")
+                error_screenshot_b64 = base64.b64encode(error_screenshot).decode('utf-8')
+                print("Successfully captured error screenshot")
+            except Exception as screenshot_error:
+                print(f"Could not capture error screenshot: {screenshot_error}")
+        else:
+            print("Page is None, cannot capture screenshot")
+        
+        # Always log the error action, even without screenshot
+        try:
+            error_action = Action(
+                type="done",
+                element="Test failed with error",
+                reasoning=f"An error occurred during test execution: {str(e)}",
+                screenshot=error_screenshot_b64,
+                timestamp=datetime.now()
+            )
+            store.add_action(test_id, error_action)
+            print(f"Added error action to store for test {test_id}")
+            
+            # Emit the action via Socket.IO with proper serialization
+            error_dict = error_action.model_dump()
+            print(f"Emitting error action dict: type={error_dict.get('type')}, element={error_dict.get('element')}")
+            asyncio.run_coroutine_threadsafe(
+                sio.emit('action', error_dict, room=test_id),
+                loop
+            )
+            print(f"Emitted error action via Socket.IO to room {test_id}")
+        except Exception as action_error:
+            print(f"Failed to create/emit error action: {action_error}")
+            traceback.print_exc()
+        
+        # Update status to failed
+        try:
+            store.update(test_id, status="failed")
+            print(f"Updated test {test_id} status to failed")
+        except Exception as update_error:
+            print(f"Failed to update status: {update_error}")
+        
+        # Emit error event
+        try:
+            asyncio.run_coroutine_threadsafe(
+                sio.emit('error', {"message": str(e)}, room=test_id),
+                loop
+            )
+            print(f"Emitted error event via Socket.IO to room {test_id}")
+        except Exception as emit_error:
+            print(f"Failed to emit error event: {emit_error}")
 
 def parse_json_response(text: str) -> dict:
     """Extract and parse JSON from model response."""
