@@ -1,8 +1,9 @@
 import base64
 import json
+import asyncio
 from datetime import datetime
 from nanoid import generate
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 from google import genai
 
 from app.models import Action, TestCase
@@ -38,20 +39,26 @@ Coordinates are normalized 0-999 for both x and y regardless of actual screen si
 
 async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
     """Main agent that uses Gemini to analyze screenshots and control browser via Playwright."""
+    # Run the blocking Playwright code in a thread pool to avoid blocking the event loop
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_agent_sync, test_id, url, focus, sio, loop)
+
+def _run_agent_sync(test_id: str, url: str, focus: str, sio, loop) -> None:
+    """Synchronous version of the agent that runs in a thread."""
     try:
         # Get the test run from store
         test_run = store.get(test_id)
         if not test_run:
             raise ValueError(f"Test run {test_id} not found")
         
-        # Initialize Playwright
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
-            context = await browser.new_context(viewport={"width": SCREEN_WIDTH, "height": SCREEN_HEIGHT})
-            page = await context.new_page()
+        # Initialize Playwright with sync API
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": SCREEN_WIDTH, "height": SCREEN_HEIGHT})
+            page = context.new_page()
             
             # Navigate to URL
-            await page.goto(url, wait_until="networkidle")
+            page.goto(url, wait_until="networkidle")
             
             # Log initial navigation action
             action = Action(
@@ -60,7 +67,10 @@ async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
                 timestamp=datetime.now()
             )
             store.add_action(test_id, action)
-            await sio.emit('action', action.model_dump(), room=test_id)
+            asyncio.run_coroutine_threadsafe(
+                sio.emit('action', action.model_dump(), room=test_id),
+                loop
+            )
             
             # Get Gemini client
             client = genai.Client(api_key=GEMINI_API_KEY)
@@ -73,7 +83,7 @@ async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
                 print(f"Turn {i+1}/{turn_limit}")
                 
                 # Take screenshot
-                screenshot_bytes = await page.screenshot(type="png")
+                screenshot_bytes = page.screenshot(type="png")
                 screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
                 
                 # Build prompt for this turn
@@ -135,11 +145,14 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                         timestamp=datetime.now()
                     )
                     store.add_action(test_id, action)
-                    await sio.emit('action', action.model_dump(), room=test_id)
+                    asyncio.run_coroutine_threadsafe(
+                        sio.emit('action', action.model_dump(), room=test_id),
+                        loop
+                    )
                     break
                 
                 # Execute the action
-                result = await execute_single_action(action_name, args, page, SCREEN_WIDTH, SCREEN_HEIGHT)
+                result = execute_single_action(action_name, args, page, SCREEN_WIDTH, SCREEN_HEIGHT)
                 
                 # Log action
                 action = Action(
@@ -148,7 +161,10 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                     timestamp=datetime.now()
                 )
                 store.add_action(test_id, action)
-                await sio.emit('action', action.model_dump(), room=test_id)
+                asyncio.run_coroutine_threadsafe(
+                    sio.emit('action', action.model_dump(), room=test_id),
+                    loop
+                )
                 
                 # Update conversation history
                 conversation_history.append({
@@ -158,16 +174,24 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                     "result": result
                 })
             
-            await browser.close()
+            browser.close()
         
         # Mark test as complete
         store.update(test_id, status="complete", completed_at=datetime.now())
-        await sio.emit('complete', {"test_completed": True}, room=test_id)
+        asyncio.run_coroutine_threadsafe(
+            sio.emit('complete', {"test_completed": True}, room=test_id),
+            loop
+        )
         
     except Exception as e:
         print(f"Agent error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         store.update(test_id, status="failed")
-        await sio.emit('error', {"message": str(e)}, room=test_id)
+        asyncio.run_coroutine_threadsafe(
+            sio.emit('error', {"message": str(e)}, room=test_id),
+            loop
+        )
 
 def parse_json_response(text: str) -> dict:
     """Extract and parse JSON from model response."""
@@ -202,7 +226,7 @@ def parse_json_response(text: str) -> dict:
     
     return None
 
-async def execute_single_action(action_name: str, args: dict, page, screen_width: int, screen_height: int) -> dict:
+def execute_single_action(action_name: str, args: dict, page, screen_width: int, screen_height: int) -> dict:
     """Execute a single action returned by the model."""
     action_result = {}
     print(f"  -> Executing: {action_name} with args: {args}")
@@ -210,12 +234,12 @@ async def execute_single_action(action_name: str, args: dict, page, screen_width
     try:
         if action_name == "navigate":
             url = args.get("url", "")
-            await page.goto(url, wait_until="networkidle")
+            page.goto(url, wait_until="networkidle")
             action_result = {"element": url}
         elif action_name == "click_at":
             actual_x = denormalize_x(args["x"], screen_width)
             actual_y = denormalize_y(args["y"], screen_height)
-            await page.mouse.click(actual_x, actual_y)
+            page.mouse.click(actual_x, actual_y)
             action_result = {"element": f"({actual_x}, {actual_y})"}
         elif action_name == "type_text_at":
             actual_x = denormalize_x(args["x"], screen_width)
@@ -224,45 +248,45 @@ async def execute_single_action(action_name: str, args: dict, page, screen_width
             press_enter = args.get("press_enter", False)
             clear_before_typing = args.get("clear_before_typing", True)
             
-            await page.mouse.click(actual_x, actual_y)
+            page.mouse.click(actual_x, actual_y)
             if clear_before_typing:
-                await page.keyboard.press("Control+A")
-                await page.keyboard.press("Backspace")
-            await page.keyboard.type(text)
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
+            page.keyboard.type(text)
             if press_enter:
-                await page.keyboard.press("Enter")
+                page.keyboard.press("Enter")
             action_result = {"element": text}
         elif action_name == "scroll_document":
             direction = args["direction"]
             if direction == "down":
-                await page.mouse.wheel(0, 500)
+                page.mouse.wheel(0, 500)
             elif direction == "up":
-                await page.mouse.wheel(0, -500)
+                page.mouse.wheel(0, -500)
             elif direction == "left":
-                await page.mouse.wheel(-500, 0)
+                page.mouse.wheel(-500, 0)
             elif direction == "right":
-                await page.mouse.wheel(500, 0)
+                page.mouse.wheel(500, 0)
             action_result = {"element": direction}
         elif action_name == "go_back":
-            await page.go_back()
+            page.go_back()
             action_result = {"element": "back"}
         elif action_name == "go_forward":
-            await page.go_forward()
+            page.go_forward()
             action_result = {"element": "forward"}
         elif action_name == "wait_5_seconds":
-            await page.wait_for_timeout(5000)
+            page.wait_for_timeout(5000)
             action_result = {"element": "wait"}
         elif action_name == "key_combination":
             keys = args["keys"]
-            await page.keyboard.press(keys)
+            page.keyboard.press(keys)
             action_result = {"element": keys}
         else:
             print(f"Warning: Unknown action {action_name}")
             action_result = {"element": action_name}
         
         # Wait for page to settle
-        await page.wait_for_load_state("networkidle", timeout=5000)
-        await page.wait_for_timeout(1000)
+        page.wait_for_load_state("networkidle", timeout=5000)
+        page.wait_for_timeout(1000)
         
     except Exception as e:
         print(f"Error executing {action_name}: {e}")
