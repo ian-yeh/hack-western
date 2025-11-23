@@ -11,7 +11,7 @@ class TestResponse(BaseModel):
     status: str
 
 class Action(BaseModel):
-    type: Literal["navigate", "click", "input", "screenshot"]
+    type: Literal["navigate", "click_at", "type_text_at", "scroll_document", "go_back", "go_forward", "wait_5_seconds", "key_combination", "click", "input", "screenshot", "done"]
     element: Optional[str] = None
     value: Optional[str] = None
     screenshot: Optional[str] = None
