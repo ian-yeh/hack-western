@@ -40,7 +40,11 @@ async def run_agent(test_id: str, url: str, focus: str, sio) -> None:
             store.add_action(test_id, action)
             await sio.emit('action', action.model_dump(), room=test_id)
             
+<<<<<<< HEAD
             # Get Gemini client with API key
+=======
+            # Get Gemini client
+>>>>>>> fbcf6ce4503ae7069a7783d7074081bfa922c866
             client = genai.Client(api_key=GEMINI_API_KEY)
             
             # Configure the model with Computer Use tool
