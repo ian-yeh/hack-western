@@ -184,9 +184,33 @@ export default function TestSessionClient({
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-xl font-semibold">AI Test Session</h1>
-              <p className="text-xs text-gray-400">Session ID: {sessionId}</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-xl font-semibold">AI Test Session</h1>
+                <p className="text-xs text-gray-400">Session ID: {sessionId}</p>
+              </div>
+              {testRun && (
+                <div className="text-xs">
+                  {testRun.status === "running" && (
+                    <div className="flex items-center gap-1.5 text-blue-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Running...</span>
+                    </div>
+                  )}
+                  {testRun.status === "complete" && (
+                    <div className="flex items-center gap-1.5 text-green-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Completed</span>
+                    </div>
+                  )}
+                  {testRun.status === "failed" && (
+                    <div className="flex items-center gap-1.5 text-red-400">
+                      <XCircle className="h-4 w-4" />
+                      <span>Failed</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -200,12 +224,6 @@ export default function TestSessionClient({
                 <XCircle className="h-4 w-4 text-red-400" />
                 <span>{totalFailed} failed</span>
               </div>
-              {testRun.status === "running" && (
-                <div className="flex items-center gap-1">
-                  <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />
-                  <span>Running...</span>
-                </div>
-              )}
             </div>
           )}
         </header>
@@ -321,16 +339,7 @@ export default function TestSessionClient({
         <footer className="border-t border-purple-900/30 p-4 bg-[#0d0d14]">
           <div className="max-w-3xl mx-auto text-xs text-gray-500">
             {testRun?.status === "running" && (
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                <span>Test is running... Updates will appear in real-time</span>
-              </div>
-            )}
-            {testRun?.status === "complete" && (
-              <div className="text-green-400">✓ Test completed</div>
-            )}
-            {testRun?.status === "failed" && (
-              <div className="text-red-400">✗ Test failed</div>
+              <span>Updates will appear in real-time</span>
             )}
           </div>
         </footer>
