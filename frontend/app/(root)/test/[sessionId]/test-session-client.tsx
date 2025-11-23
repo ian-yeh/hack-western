@@ -234,12 +234,19 @@ export default function TestSessionClient({
                   <div className="flex-1 max-w-3xl space-y-2">
                     <div className="text-xs text-gray-400 mb-2">Actions ({testRun.actions.length})</div>
                     {testRun.actions.map((action, idx) => (
-                      <div key={idx} className="bg-[#0f0f1e] border border-gray-800 rounded-lg px-3 py-2 text-xs">
-                        <span className="text-purple-400 capitalize">{action.type}</span>
-                        {action.element && <span className="text-gray-400 ml-2">{action.element}</span>}
-                        <span className="text-gray-600 ml-2 text-[0.65rem]">
-                          {new Date(action.timestamp).toLocaleTimeString()}
-                        </span>
+                      <div key={idx} className="space-y-2">
+                        <div className="bg-[#0f0f1e] border border-gray-800 rounded-lg px-3 py-2 text-xs">
+                          <span className="text-purple-400 capitalize">{action.type}</span>
+                          {action.element && <span className="text-gray-400 ml-2">{action.element}</span>}
+                          <span className="text-gray-600 ml-2 text-[0.65rem]">
+                            {new Date(action.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        {action.reasoning && (
+                          <div className="text-sm text-gray-300 mb-5">
+                            {action.reasoning}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

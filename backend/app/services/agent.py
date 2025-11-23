@@ -158,6 +158,7 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                 action = Action(
                     type=action_name,
                     element=result.get('element', ''),
+                    reasoning=reasoning,
                     timestamp=datetime.now()
                 )
                 store.add_action(test_id, action)
