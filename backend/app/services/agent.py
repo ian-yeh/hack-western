@@ -7,7 +7,7 @@ from google import genai
 
 from app.models import Action, TestCase
 from app.store import store
-from backend.app.services.gemini import GEMINI_API_KEY
+from app.services.gemini import GEMINI_API_KEY
 
 # Screen dimensions
 SCREEN_WIDTH = 1440
