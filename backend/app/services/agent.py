@@ -75,8 +75,8 @@ def _run_agent_sync(test_id: str, url: str, focus: str, sio, loop) -> None:
             # Get Gemini client
             client = genai.Client(api_key=GEMINI_API_KEY)
             
-            # Agent loop - max 15 turns
-            turn_limit = 15
+            # Agent loop - max 5 turns
+            turn_limit = 5
             conversation_history = []
             
             for i in range(turn_limit):
