@@ -60,10 +60,15 @@ def _run_agent_sync(test_id: str, url: str, focus: str, sio, loop) -> None:
             # Navigate to URL
             page.goto(url, wait_until="networkidle")
             
+            # Take initial screenshot after navigation
+            initial_screenshot = page.screenshot(type="png")
+            initial_screenshot_b64 = base64.b64encode(initial_screenshot).decode('utf-8')
+            
             # Log initial navigation action
             action = Action(
                 type="navigate",
                 element=url,
+                screenshot=initial_screenshot_b64,
                 timestamp=datetime.now()
             )
             store.add_action(test_id, action)
@@ -154,11 +159,16 @@ Analyze the screenshot and decide the next action. If the test is complete, use 
                 # Execute the action
                 result = execute_single_action(action_name, args, page, SCREEN_WIDTH, SCREEN_HEIGHT)
                 
+                # Take screenshot after action
+                action_screenshot = page.screenshot(type="png")
+                action_screenshot_b64 = base64.b64encode(action_screenshot).decode('utf-8')
+                
                 # Log action
                 action = Action(
                     type=action_name,
                     element=result.get('element', ''),
                     reasoning=reasoning,
+                    screenshot=action_screenshot_b64,
                     timestamp=datetime.now()
                 )
                 store.add_action(test_id, action)
