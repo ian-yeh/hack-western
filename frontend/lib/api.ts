@@ -52,7 +52,7 @@ export async function createTest(
     },
     body: JSON.stringify({
       url: request.url,
-      focus: request.focus || null,
+      focus: request.focus || "Test the website",
     }),
   });
 
